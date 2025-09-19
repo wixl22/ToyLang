@@ -36,13 +36,13 @@ KEYWORDS = {
     "нов": "NEW",
 
     # ---- extra markers (syntax sugar) ----
-    # ретурн-тип после параметров:  ': Type' ИЛИ 'возвр Type'
+    # return type after parameters: ': Type' OR 'возвр Type'
     "возвр": "RET",
-    # параметр: 'name: type' ИЛИ 'арг type name'
+    # parameter: 'name: type' OR 'арг type name'
     "арг": "ARG",
-    # поле в struct: 'name: type;' ИЛИ 'атр type name;'
+    # struct field: 'name: type;' OR 'атр type name;'
     "атр": "ATTR",
-    # метод: 'func (влад *Type p) Name(...) ...'
+    # method: 'func (влад *Type p) Name(...) ...'
     "влад": "RECV",
 
     # ---- literals (bool) ----
@@ -81,29 +81,29 @@ class Lexer:
 
     def skip_ws(self):
         while True:
-            # Пробелы/табы/переводы строк
+            # Skip whitespace/tabs/newlines
             while self.peek().isspace():
                 self.advance()
 
-            # // до конца строки или EOF
+            # // single-line comment until end of line or EOF
             if self.peek() == '/' and self.peek(1) == '/':
                 while self.peek() not in ['\n', '\r', '\0']:
                     self.advance()
-                # съедим перевод строки, если есть
+                # consume newline if present
                 if self.peek() in ['\n', '\r']:
                     self.advance()
                 continue
 
-            # /* ... */ многострочный
+            # /* ... */ multi-line comment
             if self.peek() == '/' and self.peek(1) == '*':
                 self.advance();
-                self.advance()  # съели '/*'
+                self.advance()  # consume '/*'
                 while not (self.peek() == '*' and self.peek(1) == '/'):
                     if self.peek() == '\0':
                         raise SyntaxError('Unterminated block comment')
                     self.advance()
                 self.advance();
-                self.advance()  # съели '*/'
+                self.advance()  # consume '*/'
                 continue
 
             break
@@ -186,27 +186,27 @@ class Lexer:
         return toks
 
     def string(self):
-        # Ожидаем, что current == '"'
+        # Expect current character to be '"'
         start, sl, sc = self.i, self.line, self.col
         if self.peek() != '"':
             raise SyntaxError('internal: string() called not at a quote')
-        self.advance()  # съели открывающую "
+        self.advance()  # consume opening quote
 
         out = []
         while True:
             ch = self.peek()
 
-            # Конец файла, так и не встретили закрывающую кавычку
+            # End of file without closing quote
             if ch == '\0':
                 raise SyntaxError("unterminated string literal")
 
-            # Запрещаем сырой перевод строки внутри строки
+            # Disallow raw newlines inside strings
             if ch == '\n' or ch == '\r':
                 raise SyntaxError("unterminated string literal (newline in string)")
 
-            # Экранирования
+            # Handle escape sequences
             if ch == '\\':
-                self.advance()  # съели \
+                self.advance()  # consume backslash
                 esc = self.peek()
                 if esc == '\0':
                     raise SyntaxError("unterminated string escape")
@@ -219,15 +219,15 @@ class Lexer:
                     '\\': '\\',
                     '0': '\0',
                 }
-                out.append(maps.get(esc, esc))  # неизвестное \x трактуем как x
+                out.append(maps.get(esc, esc))  # treat unknown \x as x
                 continue
 
-            # Закрывающая кавычка — завершаем токен
+            # Closing quote - finish token
             if ch == '"':
                 self.advance()
                 break
 
-            # Обычный символ
+            # Regular character
             out.append(self.advance())
 
         return self._tok("STRING", "".join(out), start, sl, sc)

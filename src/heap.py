@@ -16,7 +16,7 @@ class Heap:
     def __init__(self):
         self.store: Dict[int, Cell] = {}
         self.next_addr = 1
-        self.blocks: dict[int, int] = {}  # base_addr -> count (для new T[n])
+        self.blocks: dict[int, int] = {}  # base_addr -> count (for new T[n])
 
     def alloc(self, typ: Type, init: Any = None) -> int:
         addr = self.next_addr
@@ -26,7 +26,7 @@ class Heap:
         if isinstance(typ, StructType):
             init = {fname: (0 if isinstance(ft, IntType) else False if isinstance(ft, BoolType)
             else 0.0 if isinstance(ft, FloatType) else "" if isinstance(ft, StringType)
-            else 0)  # для указателей и прочего ставим 0/NULL
+            else 0)  # for pointers and other types, set to 0/NULL
                     for fname, ft in typ.fields}
 
         self.store[addr] = Cell(typ, init)
@@ -41,14 +41,14 @@ class Heap:
         return base
 
     def free(self, addr: int):
-        # Требуем base-указатель, как в C (иначе ошибка)
+        # Require base pointer, like in C (otherwise error)
         if addr in self.blocks:
             cnt = self.blocks.pop(addr)
             for a in range(addr, addr + cnt):
                 if a in self.store:
                     del self.store[a]
             return
-        # одиночная ячейка
+        # single cell
         if addr in self.store:
             del self.store[addr]
             return

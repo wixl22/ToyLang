@@ -12,8 +12,8 @@ from src.lang_types import (
 @dataclass
 class VarEntry:
     typ: Type
-    value: Any  # текущее значение (если не boxed)
-    boxed_addr: Optional[int]  # адрес ячейки в хипе, если переменная «в коробке» (&)
+    value: Any  # current value (if not boxed)
+    boxed_addr: Optional[int]  # address of heap cell if variable is "boxed" (&)
 
 
 def _default_for_type(t: Type) -> Any:
@@ -22,7 +22,7 @@ def _default_for_type(t: Type) -> Any:
     if isinstance(t, FloatType): return 0.0
     if isinstance(t, StringType): return ""
     if isinstance(t, PtrType):   return 0  # null
-    # для прочих (StructType и т.п.) сюда не попадём: «голые» запрещены
+    # for other types (StructType etc.) we won't get here: "bare" types are forbidden
     return 0
 
 
@@ -68,7 +68,7 @@ class Memory:
         else:
             e.value = value
 
-    # &name → адрес в хипе; при первом обращении «боксим» переменную
+    # &name → heap address; on first access we "box" the variable
     def addr_of(self, name: str) -> Tuple[PtrType, int]:
         e = self._lookup(name)
         if e.boxed_addr is None:

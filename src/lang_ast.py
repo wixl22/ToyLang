@@ -19,11 +19,11 @@ class Num(Expr): val: int
 
 
 @dataclass
-class FloatLit(Expr): val: float  # ← новый
+class FloatLit(Expr): val: float
 
 
 @dataclass
-class StrLit(Expr): val: str  # ← новый
+class StrLit(Expr): val: str
 
 
 @dataclass
@@ -43,7 +43,7 @@ class Unary(Expr): op: str; right: Expr  # '*' deref, '&' address, '-' negate, '
 
 
 @dataclass
-class Binary(Expr): left: Expr; op: str; right: Expr  # + - * / % и сравнения
+class Binary(Expr): left: Expr; op: str; right: Expr  # + - * / % and comparisons
 
 
 @dataclass
@@ -80,8 +80,8 @@ class ContinueStmt(Stmt): pass
 
 @dataclass
 class NewExpr(Expr):
-    typ: Type  # например, INT, PtrType(INT) и т.п.
-    count: Optional[Expr]  # None для одиночного new T; Expr для new T[n]
+    typ: Type  # e.g., INT, PtrType(INT), etc.
+    count: Optional[Expr]  # None for single new T; Expr for new T[n]
 
 
 @dataclass
@@ -92,14 +92,14 @@ class ImportStmt(Stmt):
 @dataclass
 class FuncDef(Stmt):
     name: str
-    params: List[Tuple[str, Type]]  # [(имя, тип), ...]
+    params: List[Tuple[str, Type]]  # [(name, type), ...]
     ret_type: Type
     body: Block
 
 
 @dataclass
 class ReturnStmt(Stmt):
-    expr: Optional[Expr]  # return; или return expr;
+    expr: Optional[Expr]  # return; or return expr;
 
 
 @dataclass
@@ -117,17 +117,17 @@ class FieldAccess(Expr):
     obj: Expr
     field: str
 
-# Метод с явным приёмником
+# Method with explicit receiver
 @dataclass
 class MethodDef(Stmt):
-    recv_name: str        # как назовёшь приёмник (p, this, self, ...)
-    recv_type: Type       # TypeName или PtrType(TypeName) и т.д.
+    recv_name: str        # receiver name (p, this, self, ...)
+    recv_type: Type       # TypeName or PtrType(TypeName), etc.
     name: str
     params: List[Tuple[str, Type]]
     ret_type: Type
     body: Block
 
-# Вызов метода: recv.method(args)
+# Method call: recv.method(args)
 @dataclass
 class MethodCall(Expr):
     recv: Expr

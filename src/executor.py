@@ -16,7 +16,6 @@ from src.lang_ast import (
 from src.lexer import Lexer
 from src.parser import Parser
 from src.memory import Memory
-from src.heap import Heap
 from src.lang_types import (
     Type, IntType, BoolType, FloatType, StringType, PtrType, StructType, TypeName,
     INT, BOOL, FLOAT, STRING, VOID,
@@ -86,7 +85,7 @@ def to_bool_val(v: RTVal) -> bool:
         return bool(v.val)
     if v.typ == INT:
         return v.val != 0
-    # (optionally accept float)
+    # optionally accept float
     return bool(v.val) if v.typ == FLOAT else False
 
 
@@ -237,7 +236,7 @@ class Executor:
                 v = self.mem.heap.load(r.val)
                 return RTVal(t, v)
 
-        # field access / method call (postfix handled in parser; here: eval)
+        # field access / method call
         if isinstance(e, FieldAccess):
             base = self.eval_expr(e.obj)
             if isinstance(base.typ, PtrType) and isinstance(base.typ.inner, StructType):
@@ -620,13 +619,3 @@ class Executor:
     def run_program(self, prog: List[Stmt]):
         for st in prog:
             self.exec_stmt(st)
-
-
-# convenience runner used by toyLang.py
-
-def run(src: str, entry_file_path: Optional[str] = None) -> Memory:
-    toks = Lexer(src).tokens()
-    prog = Parser(toks).parse()
-    exe = Executor(entry_file_path=entry_file_path)
-    exe.run_program(prog)
-    return exe.mem

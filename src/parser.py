@@ -42,7 +42,7 @@ class Parser:
 
     # ---------------- statements ----------------
     def statement(self):
-        # ---- import / импорт ----
+        # import statement
         if self.match("IMPORT"):
             t = self.peek()
             self.expect("STRING", "expected string path")
@@ -50,14 +50,14 @@ class Parser:
             self.expect("SEMI", ";")
             return ImportStmt(path)
 
-        # ---- let / создПер ----
+        # variable declaration
         if self.match("LET"):
-            # Две формы:
+            # Two forms:
             # A) let name: type [= expr] ;
-            # B) создПер type name [:=|= expr] ;
-            # Определим по lookahead: IDENT ':' → форма A, иначе форма B
+            # B) let type name [:=|= expr] ;
+            # Determine by lookahead: IDENT ':' → form A, otherwise form B
             if self.peek().kind == "IDENT" and self.ahead().kind == "COLON":
-                # старая форма
+                # old form
                 name_tok = self.peek(); self.expect("IDENT", "ident")
                 self.expect("COLON", ":")
                 typ = self.parse_type()
@@ -68,7 +68,7 @@ class Parser:
                 tok_ret = self.toks[self.i - 1]
                 return self._with_pos(VarDecl(name_tok.value, typ, init), tok_ret)
             else:
-                # новая форма: создПер type name [:=|= expr];
+                # new form: let type name [:=|= expr];
                 typ = self.parse_type()
                 name_tok = self.peek(); self.expect("IDENT", "var name")
                 init = None
@@ -78,7 +78,7 @@ class Parser:
                 tok_ret = self.toks[self.i - 1]
                 return self._with_pos(VarDecl(name_tok.value, typ, init), tok_ret)
 
-        # ---- if / если ----
+        # if statement
         if self.match("IF"):
             tok_if = self.toks[self.i - 1]
             self.expect("LP", "(")
@@ -90,7 +90,7 @@ class Parser:
                 other = self.block_required()
             return self._with_pos(IfStmt(cond, then, other), tok_if)
 
-        # ---- while / пока ----
+        # while statement
         if self.match("WHILE"):
             tok_wh = self.toks[self.i - 1]
             self.expect("LP", "(")

@@ -20,15 +20,29 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="ToyLang interpreter")
     parser.add_argument(
+        "file", 
+        nargs="?", 
+        default=None,
+        help="путь к файлу для интерпретации (по умолчанию: code.tl в папке скрипта)"
+    )
+    parser.add_argument(
         "-d", "--debug",
         action="store_true",
         help="печать состояния хипа после выполнения"
     )
     args = parser.parse_args()
 
-    path = os.path.join(os.path.dirname(__file__), "code.tl")
+    # Определяем путь к файлу
+    if args.file:
+        path = args.file
+    else:
+        path = os.path.join(os.path.dirname(__file__), "code.tl")
+
     if not os.path.exists(path):
-        print("Нет файла code.tl рядом.")
+        if args.file:
+            print(f"Файл {path} не найден.")
+        else:
+            print("Нет файла code.tl рядом.")
         sys.exit(1)
 
     with open(path, "r", encoding="utf-8") as f:

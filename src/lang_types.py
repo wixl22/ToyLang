@@ -19,12 +19,12 @@ class VoidType(Type): ...
 @dataclass(frozen=True)
 class PtrType(Type): inner: Type
 
-# ссылка на именованный тип до разрешения
+# reference to a named type before resolution
 @dataclass(frozen=True)
 class TypeName(Type):
     name: str
 
-# определение структуры
+# structure definition
 @dataclass(frozen=True)
 class StructType(Type):
     name: str
@@ -34,4 +34,4 @@ INT    = IntType()
 BOOL   = BoolType()
 FLOAT  = FloatType()
 STRING = StringType()
-VOID   = VoidType()
+VOID   = VoidType
