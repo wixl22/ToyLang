@@ -3,13 +3,13 @@ import os
 from dataclasses import dataclass
 from typing import List, Any, Tuple
 
-from lang_ast import Expr, Stmt, Num, BoolLit, NullLit, Var, Unary, Binary, Assign, VarDecl, ExprStmt, Block, IfStmt, \
+from src.lang_ast import Expr, Stmt, Num, BoolLit, NullLit, Var, Unary, Binary, Assign, VarDecl, ExprStmt, Block, IfStmt, \
     WhileStmt, BreakStmt, ContinueStmt, NewExpr, ImportStmt, FuncDef, ReturnStmt, Call, StrLit, FloatLit, MethodDef, \
     StructDef, FieldAccess, MethodCall
-from lexer import Lexer
-from memory import Memory
-from parser import Parser
-from lang_types import PtrType, INT, BOOL, Type, IntType, BoolType, VOID, FLOAT, STRING, TypeName, StructType
+from src.lexer import Lexer
+from src.memory import Memory
+from src.parser import Parser
+from src.lang_types import PtrType, INT, BOOL, Type, IntType, BoolType, VOID, FLOAT, STRING, TypeName, StructType
 
 
 def is_ptr(t: Type) -> bool: return isinstance(t, PtrType)

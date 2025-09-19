@@ -1,5 +1,5 @@
-from keywords import KEYWORDS
-from tokens import Token
+from src.keywords import KEYWORDS
+from src.tokens import Token
 
 
 class Lexer:

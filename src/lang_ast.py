@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
-from lang_types import Type
+from src.lang_types import Type
 
 
 @dataclass

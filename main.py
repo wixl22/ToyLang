@@ -3,9 +3,9 @@ from __future__ import annotations
 import os
 import sys
 
-from executor import Executor
-from lexer import Lexer
-from parser import Parser
+from src.executor import Executor
+from src.lexer import Lexer
+from src.parser import Parser
 
 
 def run(src: str, entry_file_path: str | None = None):
@@ -15,12 +15,35 @@ def run(src: str, entry_file_path: str | None = None):
     return exe.mem
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="ToyLang interpreter")
+    parser.add_argument(
+        "-d", "--debug",
+        action="store_true",
+        help="печать состояния хипа после выполнения"
+    )
+    args = parser.parse_args()
+
     path = os.path.join(os.path.dirname(__file__), "code.tl")
     if not os.path.exists(path):
         print("Нет файла code.tl рядом.")
         sys.exit(1)
+
     with open(path, "r", encoding="utf-8") as f:
         src = f.read()
+
     mem = run(src, entry_file_path=path)
-    print("Конечное состояние хипа:")
-    print({addr: (str(type(cell.typ)), cell.val) for addr, cell in mem.heap.store.items()})
+
+    if args.debug:
+        print("Конечное состояние хипа:")
+        for addr, cell in mem.heap.store.items():
+            tname = getattr(cell.typ, "name", str(cell.typ))
+            if addr in mem.heap.blocks:
+                count = mem.heap.blocks[addr]
+                print(f"  @{addr:04d} : {tname:<7} [array of {count}]")
+            else:
+                if "PtrType" in tname:
+                    print(f"  @{addr:04d} : {tname:<12} -> {cell.val}")
+                else:
+                    print(f"  @{addr:04d} : {tname:<12} = {cell.val}")

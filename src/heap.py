@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Any
 
-from lang_types import Type, IntType, BoolType, StructType, FloatType, StringType
+from src.lang_types import Type, IntType, BoolType, StructType, FloatType, StringType
 
 
 @dataclass

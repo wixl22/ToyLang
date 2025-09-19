@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from lang_types import Type, IntType, BoolType, PtrType, INT, BOOL, VOID, FLOAT, STRING, TypeName
-from lang_ast import Expr, Num, BoolLit, NullLit, Var, Unary, Binary, Assign, VarDecl, ExprStmt, Block, IfStmt, \
+from src.lang_types import Type, IntType, BoolType, PtrType, INT, BOOL, VOID, FLOAT, STRING, TypeName
+from src.lang_ast import Expr, Num, BoolLit, NullLit, Var, Unary, Binary, Assign, VarDecl, ExprStmt, Block, IfStmt, \
     WhileStmt, BreakStmt, ContinueStmt, NewExpr, ImportStmt, Call, ReturnStmt, FuncDef, StrLit, FloatLit, \
     StructDef, MethodDef, FieldAccess, MethodCall
 

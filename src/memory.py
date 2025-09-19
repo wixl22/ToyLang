@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Any, List
 
-from heap import Heap
-from lang_types import Type
+from src.heap import Heap
+from src.lang_types import Type
 
 
 class Memory:
