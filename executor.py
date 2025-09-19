@@ -128,18 +128,21 @@ class Executor:
             args = [self.eval_expr(a) for a in e.args]
 
             # ---- builtins ----
-            if e.name == "print":
-                # печатаем ровно значения, через пробел
-                out = []
-                for v in args: out.append(str(v.val))
+            name = e.name.lower()
+
+            if name in ("print", "печать"):
+                out = [str(v.val) for v in args]
                 print(" ".join(out))
                 return RTVal(INT, 0)
 
-            if e.name == "free":
-                if len(args) != 1: raise TypeError("free expects 1 argument")
+            if name in ("free", "освободи"):
+                if len(args) != 1:
+                    raise TypeError("free expects 1 argument")
                 p = args[0]
-                if not is_ptr(p.typ): raise TypeError("free expects pointer")
-                if p.val == 0: raise RuntimeError("free(null)")
+                if not is_ptr(p.typ):
+                    raise TypeError("free expects pointer")
+                if p.val == 0:
+                    raise RuntimeError("free(null)")
                 self.mem.heap.free(p.val)
                 return RTVal(INT, 0)
 
@@ -433,6 +436,8 @@ class Executor:
 
         if isinstance(s, VarDecl):
             t = self.resolve_type(s.typ)  # ← добавили
+            if isinstance(t, StructType):
+                raise TypeError(f"struct variables must be pointers: use '*{t.name}' and 'нов {t.name}'")
             init_val = None
             if s.init is not None:
                 v = self.eval_expr(s.init)

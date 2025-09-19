@@ -66,14 +66,14 @@ class Lexer:
     def ident_or_kw(self):
         start = self.i
         s = ""
-        while self.peek().isalnum() or self.peek() == '_':
+        while self.peek().isalnum() or self.peek() == '_' or ('\u0400' <= self.peek() <= '\u04FF'):
             s += self.advance()
-        if s in KEYWORDS:
-            return Token(s.upper(), s, start)
+        low = s.lower()
+        if low in KEYWORDS: return Token(KEYWORDS[low], s, start)
         return Token("IDENT", s, start)
 
     def tokens(self):
-        two = {'==': 'EQ', '!=': 'NE', '<=': 'LE', '>=': 'GE'}
+        two = {'==': 'EQ', '!=': 'NE', '<=': 'LE', '>=': 'GE', ':=': 'ASSIGN2'}
         one = {
             '+': 'PLUS', '-': 'MINUS', '*': 'STAR', '/': 'SLASH', '%': 'PERCENT',
             '=': 'ASSIGN', ';': 'SEMI', '&': 'AMP', ':': 'COLON',
