@@ -12,18 +12,30 @@ from src.parser import Parser
 from src.lang_types import PtrType, INT, BOOL, Type, IntType, BoolType, VOID, FLOAT, STRING, TypeName, StructType
 
 
-def is_ptr(t: Type) -> bool: return isinstance(t, PtrType)
+def is_ptr(t): return isinstance(t, PtrType)
 
+def is_num(t):  # число = int/float/bool (bool как int)
+    return t in (INT, FLOAT, BOOL)
 
-def is_num(t: Type) -> bool: return t in (INT, FLOAT)
+def to_int(v):  # RTVal -> python int (bool → 0/1)
+    if v.typ == INT:  return int(v.val)
+    if v.typ == BOOL: return 1 if bool(v.val) else 0
+    raise TypeError("expected int/bool")
 
+def to_bool_val(v):  # RTVal -> python bool, допускаем int/bool
+    if v.typ == BOOL: return bool(v.val)
+    if v.typ == INT:  return v.val != 0
+    # (опционально: разрешить FLOAT → v.val != 0.0)
+    raise TypeError("condition/logical expects int/bool")
 
-def num_coerce(l: RTVal, r: RTVal) -> tuple[RTVal, RTVal, Type]:
+def num_coerce(l, r):
+    # если есть float → оба в float; иначе оба в int (bool→int)
     if l.typ == FLOAT or r.typ == FLOAT:
-        lv = float(l.val) if l.typ != FLOAT else l.val
-        rv = float(r.val) if r.typ != FLOAT else r.val
+        lv = float(l.val if l.typ != BOOL else (1 if l.val else 0))
+        rv = float(r.val if r.typ != BOOL else (1 if r.val else 0))
         return RTVal(FLOAT, lv), RTVal(FLOAT, rv), FLOAT
-    return l, r, INT
+    # всё остальное → в int (bool→0/1)
+    return RTVal(INT, to_int(l)), RTVal(INT, to_int(r)), INT
 
 
 class Executor:
@@ -49,6 +61,12 @@ class Executor:
                 self.exec_stmt(s)
         finally:
             self.mem.pop()
+
+    def error(self, msg: str, node=None):
+        if node is not None and hasattr(node, "pos") and node.pos:
+            line, col = node.pos
+            raise RuntimeError(f"{msg} (at line {line}, col {col})")
+        raise RuntimeError(msg)
 
     # ---- expressions ----
     def eval_expr(self, e: Expr) -> RTVal:
@@ -131,7 +149,12 @@ class Executor:
             name = e.name.lower()
 
             if name in ("print", "печать"):
-                out = [str(v.val) for v in args]
+                out = []
+                for v in args:
+                    if v.typ == BOOL:
+                        out.append(str(1 if v.val else 0))
+                    else:
+                        out.append(str(v.val))
                 print(" ".join(out))
                 return RTVal(INT, 0)
 
@@ -222,21 +245,21 @@ class Executor:
         if isinstance(e, Unary):
             if e.op == '-':
                 r = self.eval_expr(e.right)
-                if r.typ != INT: raise TypeError("unary - expects int")
+                if r.typ != INT: self.error("unary - expects int", e)
                 return RTVal(INT, -int(r.val))
             if e.op == '!':
                 r = self.eval_expr(e.right)
-                if r.typ != BOOL: raise TypeError("! expects bool")
-                return RTVal(BOOL, not bool(r.val))
+                b = to_bool_val(r)
+                return RTVal(BOOL, (not b))
             if e.op == '&':
                 if not isinstance(e.right, Var):
-                    raise TypeError("& expects variable")
+                    self.error("& expects variable", e)
                 pt, addr = self.mem.addr_of(e.right.name)
                 return RTVal(pt, addr)
             if e.op == '*':
                 r = self.eval_expr(e.right)
-                if not is_ptr(r.typ): raise TypeError("* expects pointer")
-                if r.val == 0: raise RuntimeError("dereference null")
+                if not is_ptr(r.typ): self.error("* expects pointer", e)
+                if r.val == 0: self.error("dereference null", e)
                 t = r.typ.inner
                 v = self.mem.heap.load(r.val)
                 return RTVal(t, v)
@@ -247,23 +270,38 @@ class Executor:
 
         if isinstance(e, Binary):
             l = self.eval_expr(e.left)
-            r = self.eval_expr(e.right)
             op = e.op
 
-            if is_num(l.typ) and is_num(r.typ):
-                if op == '%':
-                    if l.typ != INT or r.typ != INT:
-                        raise TypeError("% expects int % int")
-                    return RTVal(INT, int(l.val) % int(r.val))
+            if op == '&&':
+                lb = to_bool_val(l)  # принимает int/bool
+                if not lb:
+                    return RTVal(BOOL, False)
+                r = self.eval_expr(e.right)
+                rb = to_bool_val(r)
+                return RTVal(BOOL, rb)
 
-                if op in ['+', '-', '*', '/']:
-                    l2, r2, RT = num_coerce(l, r)
-                    if op == '+': return RTVal(RT, l2.val + r2.val)
-                    if op == '-': return RTVal(RT, l2.val - r2.val)
-                    if op == '*': return RTVal(RT, l2.val * r2.val)
-                    if op == '/':
-                        l2, r2, _ = num_coerce(l, r)
-                        return RTVal(FLOAT, l2.val / r2.val)
+            if op == '||':
+                lb = to_bool_val(l)
+                if lb:
+                    return RTVal(BOOL, True)
+                r = self.eval_expr(e.right)
+                rb = to_bool_val(r)
+                return RTVal(BOOL, rb)
+
+            r = self.eval_expr(e.right)
+
+            if op in ['+', '-', '*', '/', '%'] and is_num(l.typ) and is_num(r.typ):
+                if op == '%':
+                    l2, r2, _ = num_coerce(l, r)
+                    # модуль определён только для int → округляем заранее
+                    if _ != INT:
+                        raise TypeError("% expects int % int")
+                    return RTVal(INT, int(l2.val) % int(r2.val))
+                l2, r2, RT = num_coerce(l, r)
+                if op == '+': return RTVal(RT, l2.val + r2.val)
+                if op == '-': return RTVal(RT, l2.val - r2.val)
+                if op == '*': return RTVal(RT, l2.val * r2.val)
+                if op == '/': return RTVal(FLOAT, float(l2.val) / float(r2.val))
 
             if op == '+' and l.typ == STRING and r.typ == STRING:
                 return RTVal(STRING, str(l.val) + str(r.val))
@@ -277,9 +315,12 @@ class Executor:
             if op in ['==', '!=', '<', '<=', '>', '>='] and is_num(l.typ) and is_num(r.typ):
                 l2, r2, _ = num_coerce(l, r)
                 return RTVal(BOOL, {
-                    '==': l2.val == r2.val, '!=': l2.val != r2.val,
-                    '<': l2.val < r2.val, '<=': l2.val <= r2.val,
-                    '>': l2.val > r2.val, '>=': l2.val >= r2.val,
+                    '==': l2.val == r2.val,
+                    '!=': l2.val != r2.val,
+                    '<': l2.val < r2.val,
+                    '<=': l2.val <= r2.val,
+                    '>': l2.val > r2.val,
+                    '>=': l2.val >= r2.val,
                 }[op])
 
             if is_ptr(l.typ) and is_ptr(r.typ) and op in ['==', '!=']:
@@ -475,9 +516,8 @@ class Executor:
             return
 
         if isinstance(s, IfStmt):
-            c = self.eval_expr(s.cond);
-            self.ensure_bool(c)
-            if c.val:
+            c = self.eval_expr(s.cond)
+            if not to_bool_val(c):  # ← вместо ensure_bool + прямой .val
                 self.exec_block(s.then)
             elif s.other:
                 self.exec_block(s.other)
@@ -485,9 +525,8 @@ class Executor:
 
         if isinstance(s, WhileStmt):
             while True:
-                c = self.eval_expr(s.cond);
-                self.ensure_bool(c)
-                if not c.val: break
+                c = self.eval_expr(s.cond)
+                if not to_bool_val(c): break
                 try:
                     self.exec_block(s.body)
                 except ContinueSignal:

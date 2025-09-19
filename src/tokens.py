@@ -5,4 +5,6 @@ from dataclasses import dataclass
 class Token:
     kind: str
     value: str
-    pos: int
+    index: int
+    line: int = 1
+    col: int = 1

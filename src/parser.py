@@ -27,8 +27,9 @@ class Parser:
 
     def expect(self, kind, msg=None):
         if not self.match(kind):
-            got = self.peek().kind
-            raise SyntaxError(msg or f"expected {kind} got {got}")
+            got = self.peek()
+            where = f" at line {got.line}, col {got.col}"
+            raise SyntaxError((msg or f"expected {kind} got {got.kind}") + where)
 
     def parse(self):
         out = []
@@ -61,7 +62,8 @@ class Parser:
                 if self.match("ASSIGN") or self.match("ASSIGN2"):
                     init = self.expression()
                 self.expect("SEMI", ";")
-                return VarDecl(name_tok.value, typ, init)
+                tok_ret = self.toks[self.i - 1]
+                return self._with_pos(VarDecl(name_tok.value, typ, init), tok_ret)
             else:
                 # новая форма: создПер type name [:=|= expr];
                 typ = self.parse_type()
@@ -70,10 +72,12 @@ class Parser:
                 if self.match("ASSIGN2") or self.match("ASSIGN"):
                     init = self.expression()
                 self.expect("SEMI", ";")
-                return VarDecl(name_tok.value, typ, init)
+                tok_ret = self.toks[self.i - 1]
+                return self._with_pos(VarDecl(name_tok.value, typ, init), tok_ret)
 
         # ---- if / если ----
         if self.match("IF"):
+            tok_if = self.toks[self.i - 1]
             self.expect("LP", "(")
             cond = self.expression()
             self.expect("RP", ")")
@@ -81,25 +85,28 @@ class Parser:
             other = None
             if self.match("ELSE"):
                 other = self.block_required()
-            return IfStmt(cond, then, other)
+            return self._with_pos(IfStmt(cond, then, other), tok_if)
 
         # ---- while / пока ----
         if self.match("WHILE"):
+            tok_wh = self.toks[self.i - 1]
             self.expect("LP", "(")
             cond = self.expression()
             self.expect("RP", ")")
             body = self.block_required()
-            return WhileStmt(cond, body)
+            return self._with_pos(WhileStmt(cond, body), tok_wh)
 
         # ---- break / прервать ----
         if self.match("BREAK"):
+            tok_ret = self.toks[self.i - 1]
             self.expect("SEMI", ";")
-            return BreakStmt()
+            return self._with_pos(BreakStmt(), tok_ret)
 
         # ---- continue / продолжить ----
         if self.match("CONTINUE"):
+            tok_ret = self.toks[self.i - 1]
             self.expect("SEMI", ";")
-            return ContinueStmt()
+            return self._with_pos(ContinueStmt(), tok_ret)
 
         # ---- return / вернуть ----
         if self.match("RETURN"):
@@ -107,7 +114,8 @@ class Parser:
             if not self.match("SEMI"):
                 expr = self.expression()
                 self.expect("SEMI", ";")
-            return ReturnStmt(expr)
+            tok_ret = self.toks[self.i - 1]
+            return self._with_pos(ReturnStmt(expr), tok_ret)
 
         # ---- struct / создСтрук ----
         if self.match("STRUCT"):
@@ -130,7 +138,8 @@ class Parser:
                 f_type = self.parse_type()
                 self.expect("SEMI", ";")
                 fields.append((f_name.value, f_type))
-            return StructDef(name_tok.value, fields)
+            tok_ret = self.toks[self.i - 1]
+            return self._with_pos(StructDef(name_tok.value, fields), tok_ret)
 
         # ---- func / создФунк (обычные функции и методы) ----
         if self.match("FUNC"):
@@ -159,28 +168,33 @@ class Parser:
                 params = self.parse_param_list()
                 ret_type = self.parse_return_type()
                 body = self.block_required()
-                return MethodDef(recv_name, recv_type, m_name_tok.value, params, ret_type, body)
+                tok_ret = self.toks[self.i - 1]
+                return self._with_pos(MethodDef(recv_name, recv_type, m_name_tok.value, params, ret_type, body), tok_ret)
 
             # обычная функция
             name_tok = self.peek(); self.expect("IDENT", "function name")
             params = self.parse_param_list()
             ret_type = self.parse_return_type()
             body = self.block_required()
-            return FuncDef(name_tok.value, params, ret_type, body)
+            tok_ret = self.toks[self.i-1]
+            return self._with_pos(FuncDef(name_tok.value, params, ret_type, body), tok_ret)
 
         # ---- assignment or expr ; ----
         save_i = self.i
         lhs = self.expression()
         if isinstance(lhs, (Var, FieldAccess)) or (isinstance(lhs, Unary) and lhs.op == '*'):
             if self.match("ASSIGN2") or self.match("ASSIGN"):
+                assign_tok = getattr(lhs, "pos", self.toks[self.i - 1])
                 val = self.expression()
                 self.expect("SEMI")
-                return Assign(lhs, val)
+                return self._with_pos(Assign(lhs, val), assign_tok)
         # не присваивание → откатываемся и парсим просто выражение;
         self.i = save_i
         e = self.expression()
         self.expect("SEMI")
-        return ExprStmt(e)
+        tok_ret = self.toks[self.i - 1]
+
+        return self._with_pos(ExprStmt(e), tok_ret)
 
     # ---------------- helpers ----------------
     def parse_param_list(self):
@@ -235,13 +249,30 @@ class Parser:
 
     # ---------------- expressions ----------------
     def expression(self):
-        return self.equality()
+        return self.logical_or()
+
+    def logical_or(self):
+        expr = self.logical_and()
+        while self.match("OR"):
+            op = '||'
+            tok = getattr(expr, "pos", self.toks[self.i - 1])  # если есть
+            expr = self._with_pos(Binary(expr, op, self.logical_and()), tok)
+        return expr
+
+    def logical_and(self):
+        expr = self.equality()
+        while self.match("AND"):
+            op = '&&'
+            tok = getattr(expr, "pos", self.toks[self.i - 1])  # если есть
+            expr = self._with_pos(Binary(expr, op, self.equality()), tok)
+        return expr
 
     def equality(self):
         expr = self.comparison()
         while self.match("EQ", "NE"):
             op = '==' if self.toks[self.i - 1].kind == 'EQ' else '!='
-            expr = Binary(expr, op, self.comparison())
+            tok = getattr(expr, "pos", self.toks[self.i - 1])  # если есть
+            expr = self._with_pos(Binary(expr, op, self.comparison()), tok)
         return expr
 
     def comparison(self):
@@ -249,14 +280,16 @@ class Parser:
         while self.match("LT", "LE", "GT", "GE"):
             m = self.toks[self.i - 1].kind
             op = {'LT': '<', 'LE': '<=', 'GT': '>', 'GE': '>='}[m]
-            expr = Binary(expr, op, self.term())
+            tok = getattr(expr, "pos", self.toks[self.i - 1])  # если есть
+            expr = self._with_pos(Binary(expr, op, self.term()), tok)
         return expr
 
     def term(self):
         expr = self.factor()
         while self.match("PLUS", "MINUS"):
             op = '+' if self.toks[self.i - 1].kind == 'PLUS' else '-'
-            expr = Binary(expr, op, self.factor())
+            tok = getattr(expr, "pos", self.toks[self.i - 1])  # если есть
+            expr = self._with_pos(Binary(expr, op, self.factor()), tok)
         return expr
 
     def factor(self):
@@ -264,14 +297,23 @@ class Parser:
         while self.match("STAR", "SLASH", "PERCENT"):
             k = self.toks[self.i - 1].kind
             op = {'STAR': '*', 'SLASH': '/', 'PERCENT': '%'}[k]
-            expr = Binary(expr, op, self.unary())
+            tok = getattr(expr, "pos", self.toks[self.i - 1])  # если есть
+            expr = self._with_pos(Binary(expr, op, self.unary()), tok)
         return expr
 
     def unary(self):
-        if self.match("MINUS"): return Unary('-', self.unary())
-        if self.match("AMP"):   return Unary('&', self.unary_var())
-        if self.match("STAR"):  return Unary('*', self.unary())
-        if self.match("BANG"):  return Unary('!', self.unary())
+        if self.match("MINUS"):
+            tok = self.toks[self.i - 1]
+            return self._with_pos(Unary('-', self.unary()), tok)
+        if self.match("AMP"):
+            tok = self.toks[self.i - 1]
+            return self._with_pos(Unary('&', self.unary_var()), tok)
+        if self.match("STAR"):
+            tok = self.toks[self.i - 1]
+            return self._with_pos(Unary('*', self.unary()), tok)
+        if self.match("BANG"):
+            tok = self.toks[self.i - 1]
+            return self._with_pos(Unary('!', self.unary()), tok)
         return self.primary()
 
     def unary_var(self):
@@ -282,6 +324,7 @@ class Parser:
         while True:
             if self.match("DOT"):
                 m = self.peek(); self.expect("IDENT", "field/method name")
+                tok_name = m  # токен имени после DOT
                 # метод?
                 if self.match("LP"):
                     args = []
@@ -290,45 +333,51 @@ class Parser:
                             args.append(self.expression())
                             if self.match("RP"): break
                             self.expect("COMMA", ",")
-                    expr = MethodCall(expr, m.value, args)
+                    expr = self._with_pos(MethodCall(expr, m.value, args), tok_name)
                     continue
                 # поле
-                expr = FieldAccess(expr, m.value)
+                expr = self._with_pos(FieldAccess(expr, m.value), tok_name)
                 continue
             break
         return expr
 
+    def _with_pos(self, node, tok):
+        # присваиваем .pos = (line, col)
+        try:
+            node.pos = (tok.line, tok.col)
+        except Exception:
+            pass
+        return node
+
     def primary(self):
         t = self.peek()
-
         if self.match("NUMBER"):
             lex = t.value
-            expr = FloatLit(float(lex)) if '.' in lex else Num(int(lex))
-            return self.postfix(expr)
+            node = FloatLit(float(lex)) if '.' in lex else Num(int(lex))
+            return self.postfix(self._with_pos(node, t))
 
         if self.match("STRING"):
-            return self.postfix(StrLit(t.value))
+            return self.postfix(self._with_pos(StrLit(t.value), t))
 
         if self.match("TRUE"):
-            return self.postfix(BoolLit(True))
+            return self.postfix(self._with_pos(BoolLit(True), t))
 
         if self.match("FALSE"):
-            return self.postfix(BoolLit(False))
+            return self.postfix(self._with_pos(BoolLit(False), t))
 
         if self.match("NULL"):
-            return self.postfix(NullLit())
+            return self.postfix(self._with_pos(NullLit(), t))
 
         if self.match("NEW"):
-            typ = self.parse_type()
+            typ = self.parse_type();
             cnt = None
-            if self.match("LBRACK"):  # '['
-                cnt = self.expression()
-                self.expect("RBRACK", "]")  # ']'
-            return self.postfix(NewExpr(typ, cnt))
+            if self.match("LBRACK"):
+                cnt = self.expression();
+                self.expect("RBRACK", "]")
+            return self.postfix(self._with_pos(NewExpr(typ, cnt), t))
 
         if self.match("IDENT"):
             name = t.value
-            # вызов функции: ident(...)
             if self.match("LP"):
                 args = []
                 if not self.match("RP"):
@@ -336,10 +385,8 @@ class Parser:
                         args.append(self.expression())
                         if self.match("RP"): break
                         self.expect("COMMA", ",")
-                expr = Call(name, args)
-                return self.postfix(expr)
-            # просто переменная
-            return self.postfix(Var(name))
+                return self.postfix(self._with_pos(Call(name, args), t))
+            return self.postfix(self._with_pos(Var(name), t))
 
         if self.match("LP"):
             e = self.expression()

@@ -3,20 +3,32 @@ from src.tokens import Token
 
 
 class Lexer:
-    def __init__(self, src: str):
+    def __init__(self, src: str, filename: str = "<stdin>"):
         self.src = src
         self.i = 0
         self.n = len(src)
+        self.line = 1
+        self.col = 1
+        self.filename = filename
 
     def peek(self, k=0):
         j = self.i + k
-        return self.src[j] if j < self.n else '\0'  # явный EOF
+        return self.src[j] if j < self.n else '\0'
 
     def advance(self):
         ch = self.peek()
-        if ch != '\0':
-            self.i += 1
+        if ch == '\0':
+            return ch
+        self.i += 1
+        if ch == '\n':
+            self.line += 1
+            self.col = 1
+        else:
+            self.col += 1
         return ch
+
+    def _tok(self, kind: str, value: str, start_i: int, start_line: int, start_col: int):
+        return Token(kind, value, start_i, start_line, start_col)
 
     def skip_ws(self):
         while True:
@@ -48,7 +60,7 @@ class Lexer:
             break
 
     def number(self):
-        start = self.i
+        start_i, sl, sc = self.i, self.line, self.col
         s = ""
         has_dot = False
         while True:
@@ -61,19 +73,21 @@ class Lexer:
                 s += self.advance()
                 continue
             break
-        return Token("NUMBER", s, start)
+        return self._tok("NUMBER", s, start_i, sl, sc)
 
     def ident_or_kw(self):
-        start = self.i
+        start_i, sl, sc = self.i, self.line, self.col
         s = ""
         while self.peek().isalnum() or self.peek() == '_' or ('\u0400' <= self.peek() <= '\u04FF'):
             s += self.advance()
         low = s.lower()
-        if low in KEYWORDS: return Token(KEYWORDS[low], s, start)
-        return Token("IDENT", s, start)
+        if low in KEYWORDS:
+            return self._tok(KEYWORDS[low], s, start_i, sl, sc)
+        return self._tok("IDENT", s, start_i, sl, sc)
 
     def tokens(self):
-        two = {'==': 'EQ', '!=': 'NE', '<=': 'LE', '>=': 'GE', ':=': 'ASSIGN2'}
+        two = {'==': 'EQ', '!=': 'NE', '<=': 'LE', '>=': 'GE', ':=': 'ASSIGN2',
+               '&&': 'AND', '||': 'OR'}
         one = {
             '+': 'PLUS', '-': 'MINUS', '*': 'STAR', '/': 'SLASH', '%': 'PERCENT',
             '=': 'ASSIGN', ';': 'SEMI', '&': 'AMP', ':': 'COLON',
@@ -87,15 +101,19 @@ class Lexer:
         while True:
             self.skip_ws()
             ch = self.peek()
+
+            start_i, sl, sc = self.i, self.line, self.col
+
             if ch == '\0':
-                toks.append(Token("EOF", "", self.i))
+                toks.append(self._tok("EOF", "", start_i, sl, sc))
                 break
 
             pair = ch + self.peek(1)
             if pair in two:
-                toks.append(Token(two[pair], pair, self.i))
-                self.advance();
+                t = self._tok(two[pair], pair, start_i, sl, sc)
                 self.advance()
+                self.advance()
+                toks.append(t)
                 continue
 
             if ch.isdigit():
@@ -107,7 +125,7 @@ class Lexer:
                 continue
 
             if ch in one:
-                toks.append(Token(one[ch], ch, self.i))
+                toks.append(self._tok(one[ch], ch, start_i, sl, sc))
                 self.advance()
                 continue
 
@@ -120,7 +138,7 @@ class Lexer:
 
     def string(self):
         # Ожидаем, что current == '"'
-        start = self.i
+        start, sl, sc = self.i, self.line, self.col
         if self.peek() != '"':
             raise SyntaxError('internal: string() called not at a quote')
         self.advance()  # съели открывающую "
@@ -163,4 +181,4 @@ class Lexer:
             # Обычный символ
             out.append(self.advance())
 
-        return Token("STRING", "".join(out), start)
+        return self._tok("STRING", "".join(out), start, sl, sc)
