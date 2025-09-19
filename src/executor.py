@@ -194,17 +194,12 @@ class Executor:
 
         if isinstance(e, FieldAccess):
             base = self.eval_expr(e.obj)
-            # Var/значение структуры
-            if isinstance(base.typ, StructType):
-                field_t = dict(base.typ.fields)[e.field]
-                return RTVal(field_t, base.val[e.field])
-            # Указатель на структуру
             if isinstance(base.typ, PtrType) and isinstance(base.typ.inner, StructType):
                 if base.val == 0: raise RuntimeError("dereference null")
-                obj = self.mem.heap.load(base.val)
+                obj = self.mem.heap.load(base.val)  # dict полей
                 field_t = dict(base.typ.inner.fields)[e.field]
                 return RTVal(field_t, obj[e.field])
-            raise TypeError("field access on non-struct")
+            raise TypeError("field access on non-struct pointer")
 
         if isinstance(e, NewExpr):
             t = self.resolve_type(e.typ)  # ← было: t = e.typ
@@ -218,11 +213,10 @@ class Executor:
             return RTVal(PtrType(t), base)
 
         if isinstance(e, Var):
+            # тип-”код” (#int/…) оставь как было, если используешь
             if e.name.startswith('#'):
                 return RTVal(_decode_type(e.name), None)
-            addr = self.mem.find(e.name)
-            t = self.mem.heap.typeof(addr)
-            v = self.mem.heap.load(addr)
+            t, v = self.mem.get(e.name)
             return RTVal(t, v)
 
         if isinstance(e, Unary):
@@ -237,9 +231,8 @@ class Executor:
             if e.op == '&':
                 if not isinstance(e.right, Var):
                     raise TypeError("& expects variable")
-                addr = self.mem.find(e.right.name)
-                t = self.mem.heap.typeof(addr)
-                return RTVal(PtrType(t), addr)
+                pt, addr = self.mem.addr_of(e.right.name)
+                return RTVal(pt, addr)
             if e.op == '*':
                 r = self.eval_expr(e.right)
                 if not is_ptr(r.typ): raise TypeError("* expects pointer")
@@ -289,8 +282,13 @@ class Executor:
                     '>': l2.val > r2.val, '>=': l2.val >= r2.val,
                 }[op])
 
-            if op in ['==', '!='] and is_ptr(l.typ) and is_ptr(r.typ) and same_type(l.typ, r.typ):
-                return RTVal(BOOL, (l.val == r.val) if op == '==' else (l.val != r.val))
+            if is_ptr(l.typ) and is_ptr(r.typ) and op in ['==', '!=']:
+                # если один из адресов = 0 (null) — сравниваем без проверки same_type
+                if l.val == 0 or r.val == 0:
+                    return RTVal(BOOL, (l.val == r.val) if op == '==' else (l.val != r.val))
+                # иначе — строго по одинаковому типу
+                if same_type(l.typ, r.typ):
+                    return RTVal(BOOL, (l.val == r.val) if op == '==' else (l.val != r.val))
 
             if op in ['==', '!='] and l.typ == BOOL and r.typ == BOOL:
                 return RTVal(BOOL, (bool(l.val) == bool(r.val)) if op == '==' else (bool(l.val) != bool(r.val)))
@@ -318,21 +316,11 @@ class Executor:
 
         # 1) obj — Var
         if isinstance(fa.obj, Var):
-            var_addr = self.mem.find(fa.obj.name)
-            var_t = self.mem.heap.typeof(var_addr)
-
-            # Var: StructType  → поле хранится в самом объекте по var_addr
-            if isinstance(var_t, StructType):
-                return var_addr, var_t, fa.field
-
-            # Var: PtrType(StructType) → разыменуем адрес, берём объект по указателю
-            if isinstance(var_t, PtrType) and isinstance(var_t.inner, StructType):
-                struct_addr = self.mem.heap.load(var_addr)
-                if struct_addr == 0:
-                    raise RuntimeError("dereference null")
-                return struct_addr, var_t.inner, fa.field
-
-            raise TypeError("field access on non-struct")
+            t, v = self.mem.get(fa.obj.name)  # t: PtrType(StructType) ожидаем
+            if isinstance(t, PtrType) and isinstance(t.inner, StructType):
+                if v == 0: raise RuntimeError("dereference null")
+                return v, t.inner, fa.field  # (адрес структуры в хипе, тип структуры, имя поля)
+            raise TypeError("field access on non-struct pointer")
 
         # 2) obj — Unary('*', ...)
         if isinstance(fa.obj, Unary) and fa.obj.op == '*':
@@ -367,10 +355,17 @@ class Executor:
             return
 
         if isinstance(s, StructDef):
-            # резолвим все типы полей
-            fields = [(fname, self.resolve_type(ft)) for fname, ft in s.fields]
-            st = StructType(s.name, fields)
+            # 1) сначала кладём пустую структуру в type_env, чтобы разрешались самоссылки
+            st = StructType(s.name, [])  # важна МУТАБЕЛЬНАЯ [] внутри!
             self.type_env[s.name] = st
+
+            # 2) теперь можно резолвить поля (в т.ч. *Node на только что созданный st)
+            resolved = []
+            for fname, ftype in s.fields:
+                resolved.append((fname, self.resolve_type(ftype)))
+
+            # 3) дозаполняем поля
+            st.fields.extend(resolved)
             return
 
         if isinstance(s, Assign) and isinstance(s.target, FieldAccess):
@@ -451,8 +446,14 @@ class Executor:
 
         if isinstance(s, Assign):
             if isinstance(s.target, Var):
-                addr = self.mem.find(s.target.name)
-                dst_t = self.mem.heap.typeof(addr)
+                dst_t = self.mem.typeof_var(s.target.name)
+                v = self.eval_expr(s.val)
+                if v.val == 0 and is_ptr(dst_t) and is_ptr(v.typ):
+                    self.mem.set(s.target.name, 0)
+                else:
+                    check_assign(dst_t, v.typ)
+                    self.mem.set(s.target.name, v.val)
+                return
             elif isinstance(s.target, Unary) and s.target.op == '*':
                 ptr = self.eval_expr(s.target.right)
                 if not is_ptr(ptr.typ): raise TypeError("*target must be pointer")

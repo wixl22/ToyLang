@@ -170,7 +170,7 @@ class Parser:
 
         # ---- assignment or expr ; ----
         save_i = self.i
-        lhs = self.expression()  # парсим левую часть полностью (включая .field, (*p).field, вызовы нам не подойдут)
+        lhs = self.expression()
         if isinstance(lhs, (Var, FieldAccess)) or (isinstance(lhs, Unary) and lhs.op == '*'):
             if self.match("ASSIGN2") or self.match("ASSIGN"):
                 val = self.expression()
