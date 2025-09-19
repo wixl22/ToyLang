@@ -4,6 +4,7 @@ import os
 import sys
 
 from src.executor import Executor
+from src.lang_types import PtrType
 from src.lexer import Lexer
 from src.parser import Parser
 
@@ -32,18 +33,19 @@ if __name__ == "__main__":
 
     with open(path, "r", encoding="utf-8") as f:
         src = f.read()
-
-    mem = run(src, entry_file_path=path)
-
-    if args.debug:
-        print("Конечное состояние хипа:")
-        for addr, cell in mem.heap.store.items():
-            tname = getattr(cell.typ, "name", str(cell.typ))
-            if addr in mem.heap.blocks:
-                count = mem.heap.blocks[addr]
-                print(f"  @{addr:04d} : {tname:<7} [array of {count}]")
-            else:
-                if "PtrType" in tname:
-                    print(f"  @{addr:04d} : {tname:<12} -> {cell.val}")
+    try:
+        mem = run(src, entry_file_path=path)
+        if args.debug:
+            print("Конечное состояние хипа:")
+            for addr, cell in mem.heap.store.items():
+                tname = getattr(cell.typ, "name", str(cell.typ))
+                is_ptr = isinstance(cell.typ, PtrType)
+                if addr in mem.heap.blocks:
+                    count = mem.heap.blocks[addr]
+                    print(f"  @{addr:04d} : {tname:<10} [array of {count}]")
+                elif is_ptr:
+                    print(f"  @{addr:04d} : {tname:<10} -> {cell.val}")
                 else:
-                    print(f"  @{addr:04d} : {tname:<12} = {cell.val}")
+                    print(f"  @{addr:04d} : {tname:<10} = {cell.val}")
+    except Exception as e:
+        print("Error: " + str(e))

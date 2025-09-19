@@ -29,7 +29,10 @@ class Parser:
         if not self.match(kind):
             got = self.peek()
             where = f" at line {got.line}, col {got.col}"
-            raise SyntaxError((msg or f"expected {kind} got {got.kind}") + where)
+            error_message = (f"expected {kind} got {got.kind}")
+            if msg:
+                error_message = (f"expected {msg} got {got.kind}")
+            raise SyntaxError(error_message + where)
 
     def parse(self):
         out = []
