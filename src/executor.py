@@ -491,7 +491,8 @@ class Executor:
             if not (isinstance(recv_t, PtrType) and isinstance(recv_t.inner, StructType)):
                 self.terr("method receiver must be *Struct", s)
             key = (recv_t.inner.name, s.name)
-            self.methods[key] = MethodDef(s.recv_name, recv_t, s.name, s.params, self.resolve_type(s.ret_type), s.body)
+            params = [(pname, self.resolve_type(ptype)) for (pname, ptype) in s.params]
+            self.methods[key] = MethodDef(s.recv_name, recv_t, s.name, params, self.resolve_type(s.ret_type), s.body)
             return
 
         if isinstance(s, FuncDef):
