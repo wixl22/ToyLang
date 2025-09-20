@@ -1,6 +1,5 @@
 from src.tokens import Token
 
-
 KEYWORDS = {
     # ---- types ----
     "int": "INT",
@@ -46,10 +45,11 @@ KEYWORDS = {
     "влад": "RECV",
 
     # ---- literals (bool) ----
-    "true":  "TRUE",
+    "true": "TRUE",
     "false": "FALSE",
-    "null":  "NULL",
+    "null": "NULL",
 }
+
 
 class Lexer:
     def __init__(self, src: str, filename: str = "<stdin>"):
@@ -96,13 +96,13 @@ class Lexer:
 
             # /* ... */ multi-line comment
             if self.peek() == '/' and self.peek(1) == '*':
-                self.advance();
+                self.advance()
                 self.advance()  # consume '/*'
                 while not (self.peek() == '*' and self.peek(1) == '/'):
                     if self.peek() == '\0':
                         raise SyntaxError('Unterminated block comment')
                     self.advance()
-                self.advance();
+                self.advance()
                 self.advance()  # consume '*/'
                 continue
 
@@ -135,16 +135,36 @@ class Lexer:
         return self._tok("IDENT", s, start_i, sl, sc)
 
     def tokens(self):
-        two = {'==': 'EQ', '!=': 'NE', '<=': 'LE', '>=': 'GE', ':=': 'ASSIGN2',
-               '&&': 'AND', '||': 'OR'}
+        two = {
+            '==': 'EQ',
+            '!=': 'NE',
+            '<=': 'LE',
+            '>=': 'GE',
+            ':=': 'ASSIGN2',
+            '&&': 'AND',
+            '||': 'OR'
+        }
         one = {
-            '+': 'PLUS', '-': 'MINUS', '*': 'STAR', '/': 'SLASH', '%': 'PERCENT',
-            '=': 'ASSIGN', ';': 'SEMI', '&': 'AMP', ':': 'COLON',
-            '(': 'LP', ')': 'RP', '{': 'LB', '}': 'RB', '<': 'LT', '>': 'GT', '!': 'BANG',
+            '+': 'PLUS',
+            '-': 'MINUS',
+            '*': 'STAR',
+            '/': 'SLASH',
+            '%': 'PERCENT',
+            '=': 'ASSIGN',
+            ';': 'SEMI',
+            '&': 'AMP',
+            ':': 'COLON',
+            '(': 'LP',
+            ')': 'RP',
+            '{': 'LB',
+            '}': 'RB',
+            '<': 'LT',
+            '>': 'GT',
+            '!': 'BANG',
             '[': 'LBRACK',
             ']': 'RBRACK',
             '.': 'DOT',
-            ',': 'COMMA',
+            ',': 'COMMA'
         }
         toks = []
         while True:

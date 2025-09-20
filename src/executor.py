@@ -111,6 +111,73 @@ def num_coerce(l: RTVal, r: RTVal) -> Tuple[RTVal, RTVal, Type]:
     return RTVal(INT, to_int(l)), RTVal(INT, to_int(r)), INT
 
 
+# ====================
+# Builtin functions
+# ====================
+
+
+def make_builtin(name, fn):
+    def wrapper(args, ex, e):
+        return fn(args, ex, e)
+
+    return wrapper
+
+
+def builtin_print(args, ex, e):
+    out = []
+    for v in args:
+        if v.typ == BOOL:
+            out.append("1" if v.val else "0")
+        else:
+            out.append(str(v.val))
+    print(" ".join(out))
+    return RTVal(INT, 0)
+
+
+def builtin_free(args, ex, e):
+    if len(args) != 1:
+        ex.terr("free expects 1 argument", e)
+    p = args[0]
+    if not is_ptr(p.typ):
+        ex.terr("free expects pointer", e)
+    if p.val == 0:
+        ex.rerr("free(null)", e)
+    ex.mem.heap.free(p.val)
+    return RTVal(INT, 0)
+
+
+def make_cast_builtin(to_type):
+    def fn(args, ex, e):
+        if len(args) != 1:
+            ex.terr("cast expects 1 argument", e)
+        return cast_value(args[0], to_type, lambda msg: ex.terr(msg, e))
+
+    return fn
+
+
+def cast_value(v: RTVal, dst_t: Type, terr) -> RTVal:
+    if isinstance(dst_t, TypeName):
+        pass
+
+    if isinstance(dst_t, (IntType, BoolType, FloatType)):
+        if v.typ == INT:
+            x = int(v.val)
+            if isinstance(dst_t, IntType):   return RTVal(INT, x)
+            if isinstance(dst_t, BoolType):  return RTVal(BOOL, x != 0)
+            if isinstance(dst_t, FloatType): return RTVal(FLOAT, float(x))
+        if v.typ == BOOL:
+            b = bool(v.val)
+            if isinstance(dst_t, IntType):   return RTVal(INT, 1 if b else 0)
+            if isinstance(dst_t, BoolType):  return RTVal(BOOL, b)
+            if isinstance(dst_t, FloatType): return RTVal(FLOAT, 1.0 if b else 0.0)
+        if v.typ == FLOAT:
+            f = float(v.val)
+            if isinstance(dst_t, IntType):   return RTVal(INT, int(f))
+            if isinstance(dst_t, BoolType):  return RTVal(BOOL, f != 0.0)
+            if isinstance(dst_t, FloatType): return RTVal(FLOAT, f)
+    return None
+
+
 # =====================
 # Executor
 # =====================
@@ -118,6 +185,21 @@ class Executor:
     def __init__(self, entry_file_path: Optional[str] = None):
         self.mem = Memory()
         self.funcs: Dict[str, FuncDef] = {}
+        self.builtins: Dict[str, Any] = {
+            "print": builtin_print,
+            "печать": builtin_print,
+            "free": builtin_free,
+            "освободи": builtin_free,
+            "вцел": make_cast_builtin(INT),
+            "вдроб": make_cast_builtin(FLOAT),
+            "вбул": make_cast_builtin(BOOL),
+
+            # англ
+            "toint": make_cast_builtin(INT),
+            "tofloat": make_cast_builtin(FLOAT),
+            "tobool": make_cast_builtin(BOOL),
+        }
+
         # methods keyed by (StructName, method_name)
         self.methods: Dict[Tuple[str, str], MethodDef] = {}
         # type environment: name -> Type
@@ -303,27 +385,11 @@ class Executor:
             # builtins
             name = e.name.lower()
             args = [self.eval_expr(a) for a in e.args]
-            if name in ("print", "печать"):
-                out = []
-                for v in args:
-                    if v.typ == BOOL:
-                        out.append(str(1 if v.val else 0))
-                    else:
-                        out.append(str(v.val))
-                print(" ".join(out))
-                return RTVal(INT, 0)
-            if name in ("free", "освободи"):
-                if len(args) != 1:
-                    self.terr("free expects 1 argument", e)
-                p = args[0]
-                if not is_ptr(p.typ):
-                    self.terr("free expects pointer", e)
-                if p.val == 0:
-                    self.rerr("free(null)", e)
-                self.mem.heap.free(p.val)
-                return RTVal(INT, 0)
-
             # user function
+
+            if name in self.builtins:
+                return self.builtins[name](args, self, e)
+
             if e.name not in self.funcs:
                 self.nerr(f"unknown function {e.name}", e)
             fdef = self.funcs[e.name]
@@ -410,9 +476,9 @@ class Executor:
                 res = {
                     '==': l2.val == r2.val,
                     '!=': l2.val != r2.val,
-                    '<':  l2.val <  r2.val,
+                    '<': l2.val < r2.val,
                     '<=': l2.val <= r2.val,
-                    '>':  l2.val >  r2.val,
+                    '>': l2.val > r2.val,
                     '>=': l2.val >= r2.val,
                 }[op]
                 return RTVal(BOOL, res)
